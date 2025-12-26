@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Table,
   Button,
@@ -20,20 +20,31 @@ import {
   EditOutlined,
   DeleteOutlined,
 } from '@ant-design/icons';
-import { useSelector } from 'react-redux';
-import { RootState } from '@/store';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '@/store';
+import { 
+  fetchProducts, 
+  createProduct, 
+  updateProduct, 
+  deleteProduct 
+} from '@/store/slices/productSlice';
 import { usePermissions } from '@/hooks/usePermissions';
 import { PermissionGuard } from '@/components/common/PermissionGuard';
 
 const { Search } = Input;
 
 export const ProductsModule: React.FC = () => {
-  const { products } = useSelector((state: RootState) => state.products);
+  const dispatch = useDispatch<AppDispatch>();
+  const { products, isLoading } = useSelector((state: RootState) => state.products);
   const { canCreate, canUpdate, canDelete } = usePermissions();
   
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [form] = Form.useForm();
+
+  useEffect(() => {
+    dispatch(fetchProducts());
+  }, [dispatch]);
 
   const handleCreate = () => {
     setEditingProduct(null);
@@ -47,14 +58,39 @@ export const ProductsModule: React.FC = () => {
     setIsModalVisible(true);
   };
 
-  const handleDelete = (id: number) => {
-    message.success('Product deleted successfully');
+  const handleDelete = async (id: number) => {
+    Modal.confirm({
+      title: 'Are you sure you want to delete this product?',
+      content: 'This action cannot be undone.',
+      okText: 'Yes, Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await dispatch(deleteProduct(id)).unwrap();
+          message.success('Product deleted successfully');
+        } catch (error: any) {
+          message.error(error.message || 'Failed to delete product');
+        }
+      },
+    });
   };
 
-  const handleSubmit = (values: any) => {
-    message.success(`Product ${editingProduct ? 'updated' : 'created'} successfully`);
-    setIsModalVisible(false);
-    form.resetFields();
+  const handleSubmit = async (values: any) => {
+    try {
+      if (editingProduct) {
+        await dispatch(updateProduct({ id: editingProduct.id, ...values })).unwrap();
+        message.success('Product updated successfully');
+      } else {
+        await dispatch(createProduct(values)).unwrap();
+        message.success('Product created successfully');
+      }
+      setIsModalVisible(false);
+      form.resetFields();
+      setEditingProduct(null);
+    } catch (error: any) {
+      message.error(error.message || 'Operation failed');
+    }
   };
 
   const columns = [
@@ -152,6 +188,7 @@ export const ProductsModule: React.FC = () => {
           columns={columns}
           dataSource={products || []}
           rowKey="id"
+          loading={isLoading}
           pagination={{ pageSize: 10 }}
         />
       </Card>
@@ -172,6 +209,32 @@ export const ProductsModule: React.FC = () => {
             <Input placeholder="Enter product name" />
           </Form.Item>
 
+          <Form.Item
+            name="description"
+            label="Description"
+          >
+            <Input.TextArea rows={3} placeholder="Enter product description" />
+          </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="sku"
+                label="SKU"
+              >
+                <Input placeholder="Auto-generated if empty" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="barcode"
+                label="Barcode"
+              >
+                <Input placeholder="Enter barcode" />
+              </Form.Item>
+            </Col>
+          </Row>
+
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
@@ -191,6 +254,25 @@ export const ProductsModule: React.FC = () => {
             </Col>
             <Col span={12}>
               <Form.Item
+                name="costPrice"
+                label="Cost Price"
+                rules={[{ required: true, message: 'Please enter cost price' }]}
+              >
+                <InputNumber
+                  min={0}
+                  step={0.01}
+                  precision={2}
+                  prefix="$"
+                  style={{ width: '100%' }}
+                  placeholder="0.00"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
                 name="stock"
                 label="Stock Quantity"
                 rules={[{ required: true, message: 'Please enter stock quantity' }]}
@@ -202,7 +284,33 @@ export const ProductsModule: React.FC = () => {
                 />
               </Form.Item>
             </Col>
+            <Col span={12}>
+              <Form.Item
+                name="minStockLevel"
+                label="Min Stock Level"
+              >
+                <InputNumber
+                  min={0}
+                  style={{ width: '100%' }}
+                  placeholder="0"
+                />
+              </Form.Item>
+            </Col>
           </Row>
+
+          <Form.Item
+            name="taxRate"
+            label="Tax Rate (%)"
+          >
+            <InputNumber
+              min={0}
+              max={100}
+              step={0.01}
+              precision={2}
+              style={{ width: '100%' }}
+              placeholder="0.00"
+            />
+          </Form.Item>
 
           <Form.Item
             name="isActive"
